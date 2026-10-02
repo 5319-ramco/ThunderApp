@@ -172,7 +172,7 @@ function Login({ onLogin, theme, onToggleTheme }) {
     <main className="login-page">
       <section className="login-aside">
         <div className="brand brand-light">
-          <span className="brand-mark"><Icon name="receipt" size={22} /></span>
+          <img className="brand-image" src={`${process.env.PUBLIC_URL}/logo192.png`} alt="" />
           <span>thunderbat</span>
         </div>
         <div className="login-promo">
@@ -493,7 +493,7 @@ function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <a className="brand sidebar-brand" href="#overview" onClick={() => setActivePage('overview')}>
-          <span className="brand-mark"><Icon name="receipt" size={22} /></span><span>thunderbat</span>
+          <img className="brand-image" src={`${process.env.PUBLIC_URL}/logo192.png`} alt="" /><span>thunderbat</span>
         </a>
         <div className="workspace-switcher"><span className="workspace-avatar">T</span><span className="workspace-copy"><strong>{TEAM_NAME}</strong><small>Team workspace</small></span><span className="switcher-dots">•••</span></div>
         <span className="nav-label">WORKSPACE</span>
@@ -539,7 +539,7 @@ function App() {
               </section>
               <section className="welcome-banner">
                 <div className="banner-copy"><span className="eyebrow light-eyebrow">{TEAM_NAME.toUpperCase()} · TEAM ADMIN</span><h2>A good team looks out<br />for each other.</h2><p>Keep your roster organized and shared costs fair. You've got this.</p><button className="banner-link" onClick={() => setActivePage('team')}>Meet your team <Icon name="arrow" size={16} /></button></div>
-                <div className="banner-art" aria-hidden="true"><span className="banner-sun" /><span className="banner-big-circle" /><span className="banner-small-circle">T</span><span className="banner-stripe stripe-one" /><span className="banner-stripe stripe-two" /><span className="banner-stripe stripe-three" /></div>
+                <div className="banner-art" aria-hidden="true"><span className="banner-sun" /><span className="banner-big-circle" /><span className="banner-small-circle"><img src={`${process.env.PUBLIC_URL}/logo192.png`} alt="" /></span><span className="banner-stripe stripe-one" /><span className="banner-stripe stripe-two" /><span className="banner-stripe stripe-three" /></div>
               </section>
               <div className="content-grid">
                 <section className="panel expense-panel">

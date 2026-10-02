@@ -9,8 +9,9 @@ beforeEach(() => {
 });
 
 test('signs in and shows the team admin dashboard', () => {
-  render(<App />);
+  const { container } = render(<App />);
 
+  expect(container.querySelector('.brand-image')).toHaveAttribute('src', '/logo192.png');
   fireEvent.change(screen.getByLabelText(/email address/i), {
     target: { value: 'coach@example.com' },
   });
