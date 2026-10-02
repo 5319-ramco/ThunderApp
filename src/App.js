@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { recognize } from 'tesseract.js';
 import { getAttachment, listAttachments, saveAttachment } from './attachmentStore';
-import { createWorkbook, parseWorkbook, PUBLIC_WORKBOOK_PATH } from './workbook';
+import { createWorkbook, parseWorkbook, PUBLIC_TOURNAMENT_PATH, PUBLIC_WORKBOOK_PATH } from './workbook';
+import { buildStandings, getMatchWinner } from './tournament';
 import './App.css';
 
 const STORAGE_KEYS = {
   user: 'thunderbat-user',
   members: 'thunderbat-members',
   expenses: 'thunderbat-expenses',
+  matches: 'thunderbat-tournament-matches',
   theme: 'thunderbat-theme',
 };
 const TEAM_NAME = 'Thunder';
@@ -216,12 +218,14 @@ function App() {
   const [members, setMembers] = useState(() => readStored(STORAGE_KEYS.members, starterMembers));
   const [expenses, setExpenses] = useState(() => readStored(STORAGE_KEYS.expenses, []));
   const [receipts, setReceipts] = useState(() => readStored('thunderbat-receipts', []));
+  const [matches, setMatches] = useState(() => readStored(STORAGE_KEYS.matches, []));
   const [documents, setDocuments] = useState([]);
   const [theme, setTheme] = useState(() => readStored(STORAGE_KEYS.theme, 'light'));
   const [activePage, setActivePage] = useState('overview');
   const [showMemberForm, setShowMemberForm] = useState(false);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [showReceiptForm, setShowReceiptForm] = useState(false);
+  const [editingMatch, setEditingMatch] = useState(null);
   const [editingMember, setEditingMember] = useState(null);
   const [workbookBusy, setWorkbookBusy] = useState(false);
   const [notice, setNotice] = useState('');
@@ -234,6 +238,7 @@ function App() {
   useEffect(() => writeStored(STORAGE_KEYS.members, members), [members]);
   useEffect(() => writeStored(STORAGE_KEYS.expenses, expenses), [expenses]);
   useEffect(() => writeStored('thunderbat-receipts', receipts), [receipts]);
+  useEffect(() => writeStored(STORAGE_KEYS.matches, matches), [matches]);
 
   useEffect(() => {
     if (!user || !window.indexedDB) return;
@@ -337,17 +342,27 @@ function App() {
 
   async function loadWorkbook(buffer, sourceName) {
     const data = await parseWorkbook(buffer);
-    if (data.members.length === 0 && data.expenses.length === 0 && data.receipts.length === 0) {
-      throw new Error('The workbook has no rows in Members, Expenses, or receipts.');
+    if (!data.hasMembersWorksheet && !data.hasTournamentWorksheet) {
+      throw new Error('The workbook has no supported Members or Tournament worksheet.');
     }
-    setMembers(data.members);
-    setExpenses(data.expenses);
-    setReceipts(data.receipts);
-    setDocuments(data.documents);
-    writeStored(STORAGE_KEYS.members, data.members);
-    writeStored(STORAGE_KEYS.expenses, data.expenses);
-    writeStored('thunderbat-receipts', data.receipts);
-    setNotice(`Loaded ${sourceName}: ${data.members.length} players, ${data.expenses.length} expenses, and ${data.receipts.length} receipts.`);
+    if (data.hasMembersWorksheet) {
+      setMembers(data.members);
+      setExpenses(data.expenses);
+      setReceipts(data.receipts);
+      setDocuments(data.documents);
+      writeStored(STORAGE_KEYS.members, data.members);
+      writeStored(STORAGE_KEYS.expenses, data.expenses);
+      writeStored('thunderbat-receipts', data.receipts);
+    }
+    if (data.hasTournamentWorksheet) {
+      setMatches(data.matches);
+      writeStored(STORAGE_KEYS.matches, data.matches);
+      setActivePage('tournament');
+    }
+    const summary = data.hasTournamentWorksheet
+      ? `${data.matches.length} doubles matches`
+      : `${data.members.length} players, ${data.expenses.length} expenses, and ${data.receipts.length} receipts`;
+    setNotice(`Loaded ${sourceName}: ${summary}.`);
   }
 
   async function loadPublicWorkbook() {
@@ -362,6 +377,24 @@ function App() {
       await loadWorkbook(await response.arrayBuffer(), 'public/thunder.xlsx');
     } catch (error) {
       setNotice(`Excel load failed: ${error.message}`);
+    } finally {
+      setWorkbookBusy(false);
+    }
+  }
+
+  async function loadTournamentWorkbook() {
+    setWorkbookBusy(true);
+    try {
+      const response = await fetch(PUBLIC_TOURNAMENT_PATH, { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error(response.status === 404
+          ? 'The badminton tournament workbook was not found in public.'
+          : `The workbook request failed (${response.status}).`);
+      }
+      await loadWorkbook(await response.arrayBuffer(), 'Badminton_Doubles_League_Tournament.xlsx');
+      setActivePage('tournament');
+    } catch (error) {
+      setNotice(`Tournament import failed: ${error.message}`);
     } finally {
       setWorkbookBusy(false);
     }
@@ -384,7 +417,7 @@ function App() {
   async function exportWorkbook() {
     setWorkbookBusy(true);
     try {
-      const data = await createWorkbook({ members, expenses, receipts, documents });
+      const data = await createWorkbook({ members, expenses, receipts, documents, matches });
       downloadWorkbook(data);
       setNotice('Updated thunder.xlsx downloaded. To use it from public, replace public/thunder.xlsx with this file.');
     } catch (error) {
@@ -392,6 +425,14 @@ function App() {
     } finally {
       setWorkbookBusy(false);
     }
+  }
+
+  function saveTournamentMatch(matchId, games, winner) {
+    setMatches((current) => current.map((match) => match.id === matchId
+      ? { ...match, games, winner }
+      : match));
+    setEditingMatch(null);
+    setNotice('Match score saved. League standings have been updated.');
   }
 
   async function addMemberDocument(member, files) {
@@ -483,7 +524,7 @@ function App() {
     }
   }
 
-  const pageTitle = activePage === 'team' ? 'Your team' : activePage === 'expenses' ? 'Expenses' : 'Admin dashboard';
+  const pageTitle = activePage === 'team' ? 'Your team' : activePage === 'expenses' ? 'Expenses' : activePage === 'tournament' ? 'Doubles league' : 'Admin dashboard';
   const recentExpenses = [...expenses].sort((first, second) => second.date.localeCompare(first.date)).slice(0, 5);
   const currentMonth = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(new Date());
 
@@ -500,6 +541,7 @@ function App() {
         <nav className="side-nav" aria-label="Workspace">
           <button className={activePage === 'overview' ? 'nav-item active' : 'nav-item'} onClick={() => setActivePage('overview')}><Icon name="grid" />Overview</button>
           <button className={activePage === 'team' ? 'nav-item active' : 'nav-item'} onClick={() => setActivePage('team')}><Icon name="users" />Team <span className="nav-count">{members.length}</span></button>
+          <button className={activePage === 'tournament' ? 'nav-item active' : 'nav-item'} onClick={() => setActivePage('tournament')}><Icon name="trend" />Tournament <span className="nav-count">{matches.length}</span></button>
           <button className={activePage === 'expenses' ? 'nav-item active' : 'nav-item'} onClick={() => setActivePage('expenses')}><Icon name="receipt" />Expenses</button>
         </nav>
         <div className="sidebar-spacer" />
@@ -513,6 +555,7 @@ function App() {
           <div className="topbar-actions">
             <span className="topbar-date">{new Intl.DateTimeFormat('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date())}</span>
             <div className="workbook-actions">
+              <button className="workbook-button" type="button" onClick={loadTournamentWorkbook} disabled={workbookBusy} title="Load the badminton doubles league workbook">Load tournament</button>
               <button className="workbook-button" type="button" onClick={loadPublicWorkbook} disabled={workbookBusy} title="Load public/thunder.xlsx">Load public</button>
               <label className="workbook-button import-workbook" htmlFor="workbook-file" title="Import an Excel workbook into the app">Import Excel</label>
               <input id="workbook-file" className="visually-hidden" type="file" accept=".xlsx" onChange={importWorkbook} />
@@ -590,6 +633,16 @@ function App() {
               </section>
             </>
           )}
+
+          {activePage === 'tournament' && (
+            <TournamentPage
+              matches={matches}
+              standings={buildStandings(matches)}
+              onLoad={loadTournamentWorkbook}
+              onEdit={setEditingMatch}
+              busy={workbookBusy}
+            />
+          )}
         </div>
         <footer className="main-footer"><span>{TEAM_NAME.toUpperCase()}</span><span>Teamwork makes the dream work <span className="footer-star">✳</span></span></footer>
       </main>
@@ -600,6 +653,7 @@ function App() {
 
       {showExpenseForm && <Modal title="Add an expense" onClose={() => setShowExpenseForm(false)}><p className="modal-intro">Log a team cost. The total is split equally across everyone on the roster.</p>{members.length ? <ExpenseForm members={members} onSubmit={addExpense} onCancel={() => setShowExpenseForm(false)} /> : <EmptyState title="Add your players first" text="You need at least one player on the roster before an expense can be split." action="Add a player" onAction={() => { setShowExpenseForm(false); setShowMemberForm(true); }} />}</Modal>}
       {showReceiptForm && <Modal title="Scan a receipt" onClose={() => setShowReceiptForm(false)}><p className="modal-intro">Capture a receipt image. Text recognition runs in your browser; review the detected details before saving.</p>{members.length ? <ReceiptScanner members={members} onSave={addScannedReceipt} /> : <EmptyState title="Add your players first" text="A receipt expense needs a person to record who paid." action="Add a player" onAction={() => { setShowReceiptForm(false); setShowMemberForm(true); }} />}</Modal>}
+      {editingMatch && <Modal title={`Record ${editingMatch.name}`} onClose={() => setEditingMatch(null)}><p className="modal-intro">{editingMatch.team1} ({editingMatch.players1}) vs {editingMatch.team2} ({editingMatch.players2})</p><MatchForm match={editingMatch} onSave={saveTournamentMatch} onCancel={() => setEditingMatch(null)} /></Modal>}
     </div>
   );
 }
@@ -615,6 +669,93 @@ function MemberDocuments({ member, documents, onUpload, onOpen }) {
     }} />
     {documents.map((item) => <button className="document-link" type="button" key={item.id} title={item.fileName} onClick={() => onOpen(item)}>{item.fileName}</button>)}
   </div>;
+}
+
+function TournamentPage({ matches, standings, onLoad, onEdit, busy }) {
+  const completedMatches = matches.filter((match) => getMatchWinner(match)).length;
+
+  return <>
+    <div className="page-heading-row">
+      <div><span className="eyebrow">BADMINTON DOUBLES LEAGUE</span><h1>Tournament</h1><p>Fixtures, game scores, results, and the live league table.</p></div>
+      <button className="primary-button" type="button" onClick={onLoad} disabled={busy}>{busy ? 'Loading…' : 'Load tournament Excel'}</button>
+    </div>
+    {matches.length ? <>
+      <section className="stats-grid tournament-stats" aria-label="Tournament statistics">
+        <article className="stat-card"><span className="stat-label">TEAMS</span><strong className="stat-value">{standings.length}</strong><span className="stat-foot">Doubles pairs</span></article>
+        <article className="stat-card"><span className="stat-label">FIXTURES</span><strong className="stat-value">{matches.length}</strong><span className="stat-foot">League matches</span></article>
+        <article className="stat-card"><span className="stat-label">COMPLETED</span><strong className="stat-value">{completedMatches}</strong><span className="stat-foot">Results recorded</span></article>
+        <article className="stat-card"><span className="stat-label">PENDING</span><strong className="stat-value">{matches.length - completedMatches}</strong><span className="stat-foot">Awaiting a winner</span></article>
+      </section>
+      <div className="tournament-grid">
+        <section className="panel tournament-matches">
+          <div className="panel-heading"><div><span className="eyebrow">FIXTURES & RESULTS</span><h2>League matches</h2></div></div>
+          <div className="match-list">{matches.map((match) => {
+            const winner = getMatchWinner(match);
+            const scores = match.games.map((game) => `${game.team1Score ?? '–'} : ${game.team2Score ?? '–'}`).join('  ·  ');
+            return <article className="match-card" key={match.id}>
+              <div className="match-card-top"><span className="match-number">{match.name}</span><span className={winner ? 'match-status complete' : 'match-status'}>{winner ? `${winner} won` : 'Pending'}</span></div>
+              <div className="match-teams">
+                <div className={winner === match.team1 ? 'match-team match-winner' : 'match-team'}><strong>{match.team1}</strong><span>{match.players1 || 'Players not listed'}</span></div>
+                <span className="match-vs">VS</span>
+                <div className={winner === match.team2 ? 'match-team match-winner' : 'match-team'}><strong>{match.team2}</strong><span>{match.players2 || 'Players not listed'}</span></div>
+              </div>
+              <div className="match-card-bottom"><span className="match-scores">{scores || 'Scores not entered'}</span><button className="secondary-button edit-member-button" type="button" onClick={() => onEdit(match)}>Record score</button></div>
+            </article>;
+          })}</div>
+        </section>
+        <section className="panel standings-panel">
+          <div className="panel-heading"><div><span className="eyebrow">LEAGUE TABLE</span><h2>Standings</h2></div><span className="balance-mark">↗</span></div>
+          <p className="panel-subtitle">2 points for a win. Scores determine the match winner when one side wins more games.</p>
+          <div className="table-wrap"><table><thead><tr><th>RANK</th><th>TEAM / PLAYERS</th><th>P</th><th>W</th><th>L</th><th>PTS</th></tr></thead><tbody>{standings.map((team) => <tr key={team.team}>
+            <td><span className={team.rank === 1 ? 'rank-badge first-rank' : 'rank-badge'}>{team.rank}</span></td>
+            <td><div className="standing-team"><strong>{team.team}</strong><small>{team.players}</small></div></td>
+            <td>{team.played}</td><td>{team.won}</td><td>{team.lost}</td><td><strong>{team.points}</strong></td>
+          </tr>)}</tbody></table></div>
+        </section>
+      </div>
+    </> : <section className="panel tournament-empty"><EmptyState title="Load the doubles league workbook" text="Import the fixture list, game scores, and starting results from the tournament spreadsheet in public." action="Load tournament Excel" onAction={onLoad} /></section>}
+  </>;
+}
+
+function MatchForm({ match, onSave, onCancel }) {
+  const [games, setGames] = useState(() => match.games.map((game) => ({
+    team1Score: game.team1Score ?? '',
+    team2Score: game.team2Score ?? '',
+  })));
+  const [winner, setWinner] = useState(() => getMatchWinner(match));
+
+  function updateScore(index, key, value) {
+    setGames((current) => current.map((game, gameIndex) => gameIndex === index
+      ? { ...game, [key]: value }
+      : game));
+  }
+
+  function submit(event) {
+    event.preventDefault();
+    const normalizedGames = games.map((game) => ({
+      team1Score: game.team1Score === '' ? null : Number(game.team1Score),
+      team2Score: game.team2Score === '' ? null : Number(game.team2Score),
+    }));
+    onSave(match.id, normalizedGames, winner);
+  }
+
+  return <form className="modal-form match-form" onSubmit={submit}>
+    <div className="game-score-head"><span>GAME</span><span>{match.team1}</span><span>{match.team2}</span></div>
+    {games.map((game, index) => <div className="game-score-row" key={`game-${index + 1}`}>
+      <strong>{index + 1}</strong>
+      <input aria-label={`Game ${index + 1} ${match.team1} points`} type="number" min="0" max="99" value={game.team1Score} onChange={(event) => updateScore(index, 'team1Score', event.target.value)} />
+      <input aria-label={`Game ${index + 1} ${match.team2} points`} type="number" min="0" max="99" value={game.team2Score} onChange={(event) => updateScore(index, 'team2Score', event.target.value)} />
+    </div>)}
+    <button className="add-game-button" type="button" onClick={() => setGames((current) => [...current, { team1Score: '', team2Score: '' }])}>+ Add game</button>
+    <label htmlFor="match-winner">Match winner</label>
+    <select id="match-winner" value={winner} onChange={(event) => setWinner(event.target.value)}>
+      <option value="">Pending / clear result</option>
+      <option value={match.team1}>{match.team1} — {match.players1}</option>
+      <option value={match.team2}>{match.team2} — {match.players2}</option>
+    </select>
+    <p className="panel-subtitle">A team winning more games automatically determines the result; the winner selection is used if game scores are incomplete or tied.</p>
+    <div className="modal-actions"><button className="secondary-button" type="button" onClick={onCancel}>Cancel</button><button className="primary-button" type="submit">Save match result</button></div>
+  </form>;
 }
 
 function ExpenseList({ expenses, members, expanded = false }) {

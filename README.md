@@ -4,7 +4,7 @@ This project was bootstrapped with [Create React App](https://github.com/faceboo
 
 ## Thunder team data
 
-The admin dashboard has **Load public**, **Import Excel**, and **Export Excel** actions in its top bar. Importing an `.xlsx` file replaces the roster, expenses, and receipts currently shown in the app and saves those records in this browser. Exporting downloads the current data as a workbook. A static React app cannot write files back into `public` or a Vercel deployment: after downloading an updated workbook, replace `public/thunder.xlsx` with it and redeploy if it should be the next default workbook. **Export Excel** creates a workbook with the expected sheets if you need a fresh template.
+The admin dashboard has **Load public**, **Load tournament**, **Import Excel**, and **Export Excel** actions in its top bar. Importing a team `.xlsx` replaces the roster, expenses, and receipts currently shown in the app; importing a tournament-only workbook updates tournament data without clearing team data. These records are saved in this browser. Exporting downloads the current data as a workbook. A static React app cannot write files back into `public` or a Vercel deployment: after downloading an updated workbook, replace the source workbook in `public` and redeploy if it should be the next default. **Export Excel** creates a workbook with the expected sheets if you need a fresh template.
 
 The workbook contains:
 
@@ -12,6 +12,9 @@ The workbook contains:
 - `Expenses`: `ID`, `Date`, `Description`, `Amount`, `Paid By ID`, `Participant IDs`
 - `receipts`: `ID`, `Expense ID`, `Date`, `Amount`, `Person ID`, `Description`, `File Name`, `OCR Text`
 - `Member Documents`: document metadata (`ID`, `Member ID`, `File Name`, `Content Type`, `Kind`)
+- `Tournament`: one row per game with match, doubles teams, winner, and each team's points
+
+The Doubles League page loads fixtures, game scores, and recorded winners from `public/Badminton_Doubles_League_Tournament.xlsx`. Edit a match to enter game-by-game scores or select a winner. Standings update from completed match results, awarding 2 points per win; scores decide the result when one team wins more games, with the selected winner used for incomplete or tied scores. Tournament edits are saved in this browser and included in **Export Excel**.
 
 Names in a `Paid By` or `Person` column are matched to the member roster when importing. Member documents and receipt images are stored in this browser's IndexedDB, not embedded in the workbook; the workbook includes their metadata only. Keep document copies separately if you need to move them to another device.
 

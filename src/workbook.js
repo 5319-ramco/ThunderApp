@@ -5,6 +5,7 @@ const SHEETS = {
   expenses: 'Expenses',
   receipts: 'receipts',
   documents: 'Member Documents',
+  tournament: 'Tournament',
 };
 
 function value(row, names) {
@@ -64,10 +65,74 @@ function parseRecords(workbook, sheetName, transformer) {
   return rowsAsObjects(getWorksheet(workbook, sheetName)).map(transformer);
 }
 
+function cellScalar(input) {
+  if (input && typeof input === 'object' && 'result' in input) return input.result;
+  return input;
+}
+
+function scoreValue(input) {
+  const scalar = cellScalar(input);
+  if (scalar === '' || scalar === null || scalar === undefined) return null;
+  const score = Number(scalar);
+  return Number.isInteger(score) && score >= 0 ? score : null;
+}
+
+function parseTournament(workbook) {
+  const worksheet = getWorksheet(workbook, SHEETS.tournament);
+  if (!worksheet) return [];
+
+  const headerRowNumber = (() => {
+    for (let rowNumber = 1; rowNumber <= worksheet.rowCount; rowNumber += 1) {
+      const firstValue = String(cellScalar(worksheet.getRow(rowNumber).getCell(1).value) || '').trim().toLowerCase();
+      if (firstValue === 'match') return rowNumber;
+    }
+    return 0;
+  })();
+  if (!headerRowNumber) throw new Error('The Tournament worksheet is missing its Match header.');
+
+  const matches = new Map();
+  for (let rowNumber = headerRowNumber + 1; rowNumber <= worksheet.rowCount; rowNumber += 1) {
+    const row = worksheet.getRow(rowNumber);
+    const matchName = String(cellScalar(row.getCell(1).value) || '').trim();
+    if (!/^match\s+\d+$/i.test(matchName)) continue;
+
+    const team1 = String(cellScalar(row.getCell(2).value) || '').trim();
+    const players1 = String(cellScalar(row.getCell(3).value) || '').trim();
+    const team2 = String(cellScalar(row.getCell(4).value) || '').trim();
+    const players2 = String(cellScalar(row.getCell(5).value) || '').trim();
+    if (!team1 || !team2) continue;
+
+    const id = matchName.toLowerCase().replace(/\s+/g, '-');
+    if (!matches.has(id)) {
+      matches.set(id, {
+        id,
+        name: matchName,
+        team1,
+        players1,
+        team2,
+        players2,
+        winner: '',
+        games: [],
+      });
+    }
+    const match = matches.get(id);
+    const winner = String(cellScalar(row.getCell(6).value) || '').trim();
+    if (winner) match.winner = winner;
+
+    const team1Score = scoreValue(row.getCell(7).value);
+    const team2Score = scoreValue(row.getCell(8).value);
+    match.games.push({ team1Score, team2Score });
+  }
+
+  return [...matches.values()];
+}
+
 export async function parseWorkbook(input) {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(input);
-  if (!getWorksheet(workbook, SHEETS.members)) {
+  const hasMembersWorksheet = Boolean(getWorksheet(workbook, SHEETS.members));
+  const matches = parseTournament(workbook);
+  if (!hasMembersWorksheet && matches.length === 0) {
     throw new Error('The workbook is missing the required Members worksheet.');
   }
 
@@ -113,7 +178,15 @@ export async function parseWorkbook(input) {
     kind: String(value(row, ['Kind']) || 'member'),
   })).filter((document) => document.fileName);
 
-  return { members, expenses, receipts, documents };
+  return {
+    members,
+    expenses,
+    receipts,
+    documents,
+    matches,
+    hasMembersWorksheet,
+    hasTournamentWorksheet: Boolean(getWorksheet(workbook, SHEETS.tournament) && matches.length),
+  };
 }
 
 function addSheet(workbook, name, headers, records) {
@@ -129,7 +202,7 @@ function addSheet(workbook, name, headers, records) {
   return worksheet;
 }
 
-export async function createWorkbook({ members, expenses, receipts, documents }) {
+export async function createWorkbook({ members, expenses, receipts, documents, matches = [] }) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Thunder team admin';
   workbook.created = new Date();
@@ -150,7 +223,21 @@ export async function createWorkbook({ members, expenses, receipts, documents })
     document.id, document.memberId, document.fileName, document.contentType, document.kind || 'member',
   ]));
 
+  addSheet(workbook, SHEETS.tournament, [
+    'Match', 'Team 1', 'Players', 'Team 2', 'Players', 'Winner', 'Team 1 Pts', 'Team 2 Pts',
+  ], matches.flatMap((match) => (match.games.length ? match.games : [{ team1Score: null, team2Score: null }]).map((game) => [
+    match.name,
+    match.team1,
+    match.players1,
+    match.team2,
+    match.players2,
+    match.winner || '',
+    game.team1Score,
+    game.team2Score,
+  ])));
+
   return workbook.xlsx.writeBuffer();
 }
 
 export const PUBLIC_WORKBOOK_PATH = `${(process.env.PUBLIC_URL || '').replace(/\/$/, '')}/thunder.xlsx`;
+export const PUBLIC_TOURNAMENT_PATH = `${(process.env.PUBLIC_URL || '').replace(/\/$/, '')}/Badminton_Doubles_League_Tournament.xlsx`;
