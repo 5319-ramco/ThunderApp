@@ -12,6 +12,7 @@ test('signs in and shows the team admin dashboard', () => {
   const { container } = render(<App />);
 
   expect(container.querySelector('.brand-image')).toHaveAttribute('src', '/logo192.png');
+  expect(container.querySelector('.promo-ball')).toHaveAttribute('src', '/logo192.png');
   fireEvent.change(screen.getByLabelText(/email address/i), {
     target: { value: 'coach@example.com' },
   });

@@ -180,7 +180,7 @@ function Login({ onLogin, theme, onToggleTheme }) {
           <h1>Spend less time splitting.<br /><span>Play more together.</span></h1>
           <p>One simple home for your team roster, shared costs, and every little detail in between.</p>
           <div className="promo-art" aria-hidden="true">
-            <div className="promo-ball">✳</div>
+            <img className="promo-ball" src={`${process.env.PUBLIC_URL}/logo192.png`} alt="" />
             <div className="promo-orbit orbit-one" />
             <div className="promo-orbit orbit-two" />
             <span className="promo-tag tag-one">TEAM, SORTED</span>

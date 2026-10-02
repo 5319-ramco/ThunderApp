@@ -228,7 +228,7 @@ td { border-top: 1px solid var(--line); color: var(--text); font-size: 10px; pad
 .login-promo h1 span { color: #f19869; }
 .login-promo > p { color: #b9bdb7; font-size: 13px; line-height: 1.8; margin: 16px 0 0; max-width: 380px; }
 .promo-art { height: 230px; margin-top: 20px; position: relative; }
-.promo-ball { align-items: center; background: #e97a43; border: 12px solid rgba(255,255,255,.15); border-radius: 50%; color: #ffe3d0; display: flex; font-size: 72px; height: 184px; justify-content: center; left: 21%; position: absolute; top: 18px; transform: rotate(-15deg); width: 184px; }
+.promo-ball { background: #e97a43; border: 12px solid rgba(255,255,255,.15); border-radius: 50%; height: 184px; left: 21%; object-fit: cover; position: absolute; top: 18px; transform: rotate(-15deg); width: 184px; }
 .promo-orbit { border: 1px solid rgba(255,255,255,.26); border-radius: 50%; height: 210px; left: 17%; position: absolute; top: 5px; transform: rotate(28deg); width: 210px; }
 .orbit-two { height: 240px; left: 14%; top: -10px; transform: rotate(-34deg); width: 240px; }
 .promo-tag { background: #f4eadf; border-radius: 5px; color: #4a463e; font-size: 8px; font-weight: 700; letter-spacing: .65px; padding: 8px 10px; position: absolute; transform: rotate(-5deg); }
