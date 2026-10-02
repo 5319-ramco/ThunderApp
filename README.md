@@ -2,6 +2,21 @@
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
+## Thunder team data
+
+The admin dashboard has **Load public**, **Import Excel**, and **Export Excel** actions in its top bar. Importing an `.xlsx` file replaces the roster, expenses, and receipts currently shown in the app and saves those records in this browser. Exporting downloads the current data as a workbook. A static React app cannot write files back into `public` or a Vercel deployment: after downloading an updated workbook, replace `public/thunder.xlsx` with it and redeploy if it should be the next default workbook. **Export Excel** creates a workbook with the expected sheets if you need a fresh template.
+
+The workbook contains:
+
+- `Members`: `ID`, `Name`, `Email`, `Position`
+- `Expenses`: `ID`, `Date`, `Description`, `Amount`, `Paid By ID`, `Participant IDs`
+- `receipts`: `ID`, `Expense ID`, `Date`, `Amount`, `Person ID`, `Description`, `File Name`, `OCR Text`
+- `Member Documents`: document metadata (`ID`, `Member ID`, `File Name`, `Content Type`, `Kind`)
+
+Names in a `Paid By` or `Person` column are matched to the member roster when importing. Member documents and receipt images are stored in this browser's IndexedDB, not embedded in the workbook; the workbook includes their metadata only. Keep document copies separately if you need to move them to another device.
+
+Receipt photo text recognition runs in the browser. Review and correct the detected description, date, amount, and payer before saving. Saving a scanned receipt also creates an expense split equally across the current roster. The app stores working roster, expense, receipt, and theme data in this browser's local storage between Excel imports.
+
 ## Available Scripts
 
 In the project directory, you can run:
